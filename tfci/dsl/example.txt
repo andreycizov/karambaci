@@ -1,0 +1,236 @@
+# pop context / push context
+# how do we ensure pops and pushes not to be saved in the context but rather in a different place ?
+
+j 1
+
+entrypoint:
+push
+exr "[]" v
+exr "x[0] + [x[1]]" v "1"
+exr "x[0] + [x[1]]" v "2"
+exr "x[0] + [x[1]]" v "3"
+
+push v=v x=@entrypoint_per_item _ret=@entrypoint_exit
+j @fork_loop
+entrypoint_exit:
+clr
+clr
+hlt
+
+entrypoint_per_item:
+logger "DEBUG" "Item had been parsed: {v}" v=v
+j _ret
+
+core_exc:
+# todo: when an exception handler is called, the stack is pushed (but the IP in the parent stack still remains as if the command had not been executed)
+uuid4 id
+# todo: generic exception handler (exceptions are raised for a variety of reasons)
+logger "CRITICAL" "Exception had been raised in a sub. FreezedId=`{id}``" id=id
+# todo: here, we need to `freeze` the given ThreadContext
+# todo: we need to realise that `freeze` needs to save the context _from_ which this procedure had been called.
+# todo: or, in other way: when somebody calls "unfreeze" - how should this thread proceed ?
+frz id _efx
+hlt
+
+
+# todo: can we have a `nip` - next_instruction_pointer that we could then reuse ? it's a virtual register
+# todo: having the value of `ip` if there is no usual branching
+freezing_thread:
+push _ref=mountains _ret=%023
+frz "freezed_id" ip=@freezing_thread_exit # todo: what should be saved here, in freeze (?)
+freezing_thread_exit:
+hlt
+
+1: ld a "asd"
+2: ld b="asds"
+3: ld b "asd" kw="asd"
+
+
+# The machine always assumes it will proceed on the next line.
+
+ep_thread: nop
+ld __ret
+ld 1
+
+entrypoint1: nop
+4: ld __cap "" # a capability is a prefix for the job_id
+5: ld __exc "/system/"
+6: ld __halt "/system/entrypoint@1"
+7: ld __proc "HUNTINGTONS"
+8: ld __ret NULL
+80: ld __ref 1
+81: nop
+9: hlt
+10: fork 12 # increase the reference count for the current context by one and push
+# if j is to an identifier ?
+11: j "15"
+13: j "/mogadishu@1:35"
+12: hlt
+
+15: hlt
+
+sys_setup_exc_handler:
+   ld __err @/core/default:core_exc
+   j _ret
+
+
+# todo: restricts a prefix of workers that are allowed to run a given thread
+sys_restrict_prefix:
+   ld _pre "v1000-"
+   j _ret
+
+# todo: how to enable picking of the code version so that the loaded 'x' functions have been actually loaded
+# todo: we could set the deployment id (that is also the range)
+
+# todo: so how do we stop certain ctxs then?
+# todo: e.g. a thread is running; how do we intercept the running context and then enforce it's update;
+# todo:      dx
+
+# todo: <code> selects the deployment version.
+
+# todo: requires:
+# todo: @arg v: array of payloads to the parallel sub-routine []
+# todo: @arg x: address of the subroutine that will be run in parallel for each of the items
+# todo:
+# todo: TODO: implement proper rate-limiting (e.g. max number of parallel requests)
+fork_loop:
+    ld i=%0
+    # todo: we need to either be able to reference the parent contexts explicitly (which probably is going to be quite slow)
+    exr "len(x[1])" length v
+    ld remaining_threads=length
+    uuid4 lock_id
+    lock_create lock_id # lock_create must not generate a lock id - ID needs to be created before hands.
+    fork_loop_compare:
+        je i length @fork_loop_end # jump to $2 if $0 == $1
+        exr "x[1][x[2]]" v_item v i
+        #arr_get x v i
+        # todo: the issue is that fork MUST get the actual value of the variable somehow (?)
+        push v=v_item vi=i x=x
+        # todo: if we fork, then the parent context never gets it's ref count increased
+        fork @fork_loop_enter_subroutine # -> increase the ctx ref count (forked with the same context)
+        pop
+        exr "x[0] + x[1]" i %1
+        logger "INFO" "Looping {}" i
+    j @fork_loop_compare
+
+    fork_loop_enter_subroutine:
+        # do something with $v here
+
+        # push items on the stack, push the return address on the stack
+        push v=v vi=vi x=x _ret=@fork_loop_exit_subroutine
+        j x
+        fork_loop_exit_subroutine: clr
+
+    fork_loop_exit_subroutine_tail:
+
+        # pull __psp # [PARENT_STACK] [SUBTHREAD_STACK] [PARENT_STACK]
+        # we can not compare at this specific context because we'd reuse a variable, then ?
+        exr "x[1]-x[2]" ^remaining_threads ^remaining_threads %1
+        # x "int_dec" ^remaining_threads ^remaining_threads "1" # should HLT cause the context to be deleted as well (?)
+        jne ^remaining_threads %0 @fork_loop_exit_still_running
+            # pop # [PARENT_STACK] [SUBTHREAD_STACK]
+
+            # todo: we're trying to lock a global lock using the current sub-thread stack
+            # todo: otherwise we need some sort of referencing parent contexts, which is not optimal
+            # str_add ^lock_id "-" vi
+            exr "''.join(str(y) for y in x[1:])" locking_id ^lock_id "-" vi
+
+            lock_try_lock ^lock_id locking_id is_locked
+
+            je is_locked %1 @fork_loop_winner
+
+            clr
+            j @fork_loop_end
+
+    fork_loop_exit_still_running:
+        clr # [PARENT_STACK] [SUBTHREAD_STACK]
+        # pop # [PARENT_STACK]
+        hlt
+
+    fork_loop_end:
+        # end of loop
+        hlt
+
+
+    fork_loop_winner:
+        clr # [PARENT_STACK]
+        lock_free lock_id
+        j _ret
+
+# since threads are so easy to create/delete
+# can we enable the suspension of threads ?
+
+
+# execute a macro-instruction by passing it the required parameters
+
+
+
+run_docker_instance:
+    push
+    uuid4 cnt_id
+    dckr_pull "locust" "docker.bpmms.com/jenkins"
+    # what is the protocol for freezing a context ?
+    # if we're issuing a WAIT
+    uuid4 freeze_id
+    # we freeze SP, but NIP is redirected this way
+    # with freeze, we may have a proper command over what is frozen and where.
+    dckr_start "locust" "docker.bpmms.com/jenkins" cnt_id
+    frz freeze_id @after_docker_wait
+    dckr_wait freeze_id "locust" cnt_id
+    hlt
+    after_docker_wait:
+    dckr_rm "locust" img
+    clr
+    hlt
+
+
+# how do we update the in-flight instructions ?
+
+7001: j 123
+8001: j 123
+
+# a mapping of the previous ctx to another one
+777: push a b c d e f a=4 a="345"
+888: push a b c d e f
+
+# a mapping of a current ctx to a new one.
+999: pop 4 b asd 34 fd=4
+
+100: ld "/exceptions/{}" __halt
+
+
+# can we tie the context changes to the same transaction that manipulates the
+# everything ?
+
+# so an execution context is "{ip} {ctx_addr}":
+# {
+#   ip: "/example_code@0:entrypoint",
+#   ctx: "/ctx/0000000001" -> {
+#      '__exc': '',
+#      '__ret': '/ctx/000000000',
+#   }
+# }
+
+
+entrypoint_deployment:
+# will only be executed for workers whose deployment is 0
+ld _d %0
+
+
+entrypoint_http:
+http_rep req_id hooray="OK" v=v h=h action=action item=item
+clr
+hlt
+
+entrypoint_http_error:
+http_rep req_id ok=%0
+hlt
+
+# an implementation of a shell in this language ?
+# when a command is issued:
+#  - a code page is created with the given shell command
+#  - a jmp instruction is issued in the context of that shell context to that code page
+#  - the code page contains the code to execute the shell command and jump out of the code page
+#  -
+
+http_default_ep:
