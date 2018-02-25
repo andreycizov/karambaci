@@ -4,8 +4,9 @@ from typing import List, Any
 
 from tfci.dsl.ast import Command
 from tfci.dsl.exception import CompilerException
-from tfci.opcode import OpcodeDef, OpArg, RefOpArg
+from tfci.opcode import OpcodeDef, OpArg, RefOpArg, SysOpcodeDef
 from tfci.dsm.executor import ExecutionError, ExecutionContext
+from tfci_core.daemons.worker.struct import FollowUp
 from tfci_std.struct import FrozenThreadContext
 
 
@@ -83,13 +84,50 @@ class FreezeOpcode(OpcodeDef):
 
         db = ctx.singleton.db
 
+        cmp, succ = frz.create(db)
+
         ok, _ = ctx.singleton.db.transaction(
             compare=[
-                db.transactions.version(frz.key) == 0
+                cmp
             ], success=[
-                db.transactions.put(frz.key, frz.serialize())
+                succ
             ]
         )
+
+
+class FreezeForkOpcode(SysOpcodeDef):
+    name = 'frz_fork'
+
+    def check(self, c: Command):
+        if len(c.args) != 1:
+            raise CompilerException(
+                c.loc,
+                "`frz_fork` requires 1 arguments"
+            )
+
+    def fn(self, ctx: ExecutionContext):
+        frz_id = ctx.resolve_arg(0)
+        cmp, succ = FrozenThreadContext.load(ctx.singleton.db, frz_id)
+
+        ok, items = ctx.singleton.db.transaction(
+            compare=[
+                cmp
+            ], success=[
+                succ
+            ]
+        )
+
+        if not ok:
+            raise ExecutionError(f'Could not find `{frz_id}`')
+
+        frz = FrozenThreadContext.deserialize_range(items)
+
+        ctx.thread.update(ip=frz.ctx.ip, sp=ctx.thread.sp + frz.ctx.sp)
+
+        return FollowUp.new([
+            ctx
+        ])
+
 
 
 class LockCreateOpcode(OpcodeDef):

@@ -26,7 +26,7 @@ class ConfDaemon(Daemon):
         )
         utility_args.required = True
 
-        util_list = utility_args.add_parser('list', help=f'list servers')
+        util_list = utility_args.add_parser('ls', help=f'list servers')
         util_add = utility_args.add_parser('add', help=f'add a server')
         util_test = utility_args.add_parser('test', help=f'test a server')
 
@@ -91,7 +91,7 @@ class ConfDaemon(Daemon):
         )
 
     def run(self):
-        if self.utility == 'list':
+        if self.utility == 'ls':
             print('LISTING')
             for k, v in ServerDef.load_all(self.db).items():
                 print(k, v)

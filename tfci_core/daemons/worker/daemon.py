@@ -43,6 +43,7 @@ class WorkerDaemon(Daemon):
             '--parallel',
             dest='parallel',
             default=2,
+            type=int,
             help='How many processes in parallel to use for ?'
         )
 
@@ -50,7 +51,7 @@ class WorkerDaemon(Daemon):
         super().startup()
 
     def ctx_put(self, key, val):
-        the_ctx = ThreadContext.deserialize(key, val)
+        the_ctx = ThreadContext.deserialize(key, -1, val)
         self.ctx[key] = the_ctx
 
         self.ctx_lock_change(key)

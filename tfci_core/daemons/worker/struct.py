@@ -4,21 +4,22 @@ from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
+from tfci.mapper import NamedTupleEx, MapperBase
 from tfci_core.const import JOBS_THREAD, JOBS_LOCK, JOBS_STACK
 
 UNSET = object()
 
 
-class StackFrame(NamedTuple):
+class StackFrame(NamedTupleEx, MapperBase):
     id: str
-    version: int
     vals: Dict
+    version: int
 
     @classmethod
-    def new(cls, vals=None):
+    def new(cls, id, vals=None):
         if vals is None:
             vals = {}
-        return StackFrame(uuid4().hex, -1, vals)
+        return StackFrame(id, vals, -1)
 
     def get(self, item):
         return self.vals[item]
@@ -31,24 +32,11 @@ class StackFrame(NamedTuple):
 
     @classmethod
     def deserialize(cls, key, version, bts):
-        return StackFrame(key, int(version), json.loads(bts))
+        return StackFrame(key, json.loads(bts), int(version))
 
     @classmethod
-    def load(cls, db: Etcd3Client, id):
-        x, kv_meta = db.get(StackFrame.stack_key(id))
-
-        if x is None:
-            return None
-
-        return StackFrame.deserialize(id, kv_meta.version, x)
-
-    @classmethod
-    def stack_key(cls, id):
+    def key_fn(cls, id):
         return JOBS_STACK % (id,)
-
-    @property
-    def key(self):
-        return StackFrame.stack_key(self.id)
 
 
 class FollowUp(NamedTuple):
@@ -67,33 +55,33 @@ class FollowUp(NamedTuple):
         )
 
 
-class ThreadContext(NamedTuple):
+class ThreadContext(NamedTupleEx, MapperBase):
     id: str
     ip: str  # like: "/sys/eg:entrypoint"
 
     # we could have instead a list of stack pointers.
     sp: List[str]
+    version: int
 
     @classmethod
-    def new(cls, ip, sp=None):
+    def new(cls, id, ip, sp=None):
         if sp is None:
             sp = []
-        return ThreadContext(uuid4().hex, ip, sp)
+        return ThreadContext(id, ip, sp, -1)
 
     def copy(self):
-        return ThreadContext(uuid4().hex, self.ip, self.sp)
+        return ThreadContext(uuid4().hex, self.ip, self.sp, self.version)
 
     def serialize(self):
         return json.dumps([self.ip, self.sp])
 
     @classmethod
-    def deserialize(cls, key, bts):
-        return ThreadContext(key, *json.loads(bts))
+    def deserialize(cls, key, version, bts):
+        return ThreadContext(key, *json.loads(bts), version)
 
-    @property
-    def key(self):
-        r = (JOBS_THREAD % (self.id,)).encode()
-        return r
+    @classmethod
+    def key_fn(self, id):
+        return JOBS_THREAD % (id,)
 
     @property
     def lock_key(self):
@@ -110,59 +98,35 @@ class ThreadContext(NamedTuple):
             success=[
                         db.transactions.put(self.lock_key, lock_ident, lease=lock_lease),
                         db.transactions.get(self.key),
-                    ] + [db.transactions.get(StackFrame.stack_key(s)) for s in
-                         (self.sp if self.sp is not None else [])],
+                    ] + [StackFrame.load(db, s)[1] for s in (self.sp if self.sp is not None else [])],
             failure=[
                 db.transactions.get(self.key)
             ]
         )
 
-        def parse_stacks(stacks):
-            ret_stacks = []
-
-            for x in stacks:
-                if len(x) == 0:
-                    ret_stacks.append(None)
-                else:
-                    (stack_item, stack_meta), *_ = x
-                    ret_stack = StackFrame.deserialize(stack_meta.key.decode()[len(JOBS_STACK % ('',)):],
-                                                       stack_meta.version, stack_item)
-
-                    ret_stacks.append(ret_stack)
-
-            return ret_stacks
-
         if not ok:
             return False, None, []
         else:
-
-            ret_stacks = []
-
             _, threads, *stacks = vals
 
-            if not len(threads):
-                thread = None
-            else:
-                (thread_item, thread_meta), *_ = threads
-                thread = ThreadContext.deserialize(thread_meta.key.decode()[len(JOBS_THREAD % ('',)):], thread_item)
+            thread = ThreadContext.deserialize_range(threads)
 
             if self.sp == thread.sp:
-                ret_stacks = parse_stacks(stacks)
+                ret_stacks = [StackFrame.deserialize_range(s) for s in stacks]
             else:
                 _, items = db.transaction(
                     compare=[
                         db.transactions.version('29384092rjufiosdajfoasdjfpdiosfjs') == 0
                     ],
                     success=[
-                        db.transactions.get(StackFrame.stack_key(s)) for s in
-                        (thread.sp if thread.sp is not None else [])
+                        StackFrame.load(db, s)[1] for s in (thread.sp if thread.sp is not None else [])
                     ],
                     failure=[
 
                     ]
                 )
 
-                ret_stacks = parse_stacks(items)
+                ret_stacks = [StackFrame.deserialize_range(s) for s in items]
 
             return ok, thread, ret_stacks
 
@@ -170,7 +134,7 @@ class ThreadContext(NamedTuple):
         new_ip = self.ip if ip == UNSET else ip
         new_sp = self.sp if sp == UNSET else sp
 
-        return ThreadContext(self.id, new_ip, new_sp)
+        return ThreadContext(self.id, new_ip, new_sp, self.version)
 
     def follow(
         self,

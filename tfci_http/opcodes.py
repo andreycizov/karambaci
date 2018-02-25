@@ -11,16 +11,17 @@ class ReplyOpcode(OpcodeDef):
 
         body = {k: v.get() for k, v in kwargs.items()}
 
-        rep = Reply(req_id.get(), body)
+        rep = Reply.new(req_id.get(), body)
+
+        cmp, upd = rep.create(db)
 
         ok, _ = db.transaction(
             compare=[
-                db.transactions.version(rep.key) == 0
+                cmp
             ],
             success=[
-                db.transactions.put(rep.key, rep.serialize())
+                upd
             ], failure=[
 
             ]
         )
-

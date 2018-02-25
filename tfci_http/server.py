@@ -1,19 +1,24 @@
 # given a definition of mappings between the paths
 # serve requests
+import sys
 import setproctitle
 import subprocess
 
 from functools import partial
 from typing import Optional, Dict
+from uuid import uuid4
 
 from bottle import Bottle
 from bottle import response
+from etcd3 import Etcd3Client
 
 from tfci.settings import Settings
 from tfci.time import time_now
 from tfci_core.daemons.db_util import watch_range_single, Ev
 from tfci_core.daemons.generic.pool import argv_decode, argv_encode
+from tfci_core.daemons.worker.struct import StackFrame
 from tfci_http.struct import RouteDef, Request, Reply
+from tfci_std.struct import FrozenThreadContext
 
 
 def bottle_server_process(ident, address, settings, routes):
@@ -26,10 +31,22 @@ def bottle_server_process(ident, address, settings, routes):
     bottle_server(ident, address, settings, routes)
 
 
-def bottle_server_callback(settings: Settings, route_def: RouteDef, *args, **kwargs):
-    db = settings.get_db()
+class Singleton:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._db = None
 
-    stack = {**route_def.stack, **kwargs}
+    @property
+    def db(self) -> Etcd3Client:
+        if not self._db:
+            self._db = self.settings.get_db()
+        return self._db
+
+
+def bottle_server_callback(singleton: Singleton, route_def: RouteDef, frz: FrozenThreadContext, *args, **kwargs):
+    db = singleton.db
+
+    stack = {**kwargs}
 
     time_start = time_now()
     ok = False
@@ -40,13 +57,13 @@ def bottle_server_callback(settings: Settings, route_def: RouteDef, *args, **kwa
 
         token = watch_range_single(db, Reply.key_fn(r.id))
 
-        ok, r = Request.initiate(db, route_def, r, *args, **stack)
+        ok, r = Request.initiate(db, frz, r, stack)
 
         if ok:
-            ev = token.get(timeout=3, close=False)
+            ev = token.get(timeout=180, close=False)
             assert ev.event == Ev.Put, f'{r.key} {ev}'
 
-            r = Reply.deserialize(r.key, ev.body)
+            r = Reply.deserialize(r.key, ev.version, ev.body)
 
             body.update(r.result)
     except TimeoutError:
@@ -66,8 +83,19 @@ def bottle_server(ident, address, settings: Settings, routes: Dict[str, RouteDef
     app = Bottle()
     host, port = address
 
+    singleton = Singleton(settings)
+
     for x in routes.values():
-        app.route(x.route, x.methods, callback=partial(bottle_server_callback, settings=settings, route_def=x),
+        cmp, succ = FrozenThreadContext.load(singleton.db, x.frz_id)
+
+        ok, (items,) = singleton.db.transaction(compare=[cmp], success=[succ], failure=[])
+
+        assert ok
+
+        frz = FrozenThreadContext.deserialize_range(items)
+
+        app.route(x.route, x.methods, callback=partial(bottle_server_callback, singleton=singleton, route_def=x,
+                                                       frz=frz),
                   name=x.id)
     app.run(host=host, port=port)
 

@@ -7,6 +7,7 @@ import setproctitle
 import signal
 import subprocess
 import typing
+from enum import Enum
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -27,13 +28,13 @@ def task_process_pool_process(ident, addr, cls, cls_args):
         nonlocal running
         running = False
 
-    # signal.signal(signal.SIGINT, stop)
-    setproctitle.setproctitle(f'pool-{ident}')
-
-    cls = argv_decode(cls)
-    cls_args = argv_decode(cls_args)
-
     with multiprocessing.connection.Client(addr, family='AF_UNIX') as c:
+        # signal.signal(signal.SIGINT, stop)
+        setproctitle.setproctitle(f'pool-{ident}')
+
+        cls = argv_decode(cls)
+        cls_args = argv_decode(cls_args)
+
         singleton = cls(ident, *cls_args)
 
         singleton.startup()
@@ -86,6 +87,11 @@ class TaskProcessRecord:
             self.queue.send(item)
         except BrokenPipeError:
             self.is_dead = True
+
+
+class PoolEvent(Enum):
+    ProcessStarted = 'PROCESS_STARTED'
+    TaskFinished = 'TASK_FINISHED'
 
 
 class TaskProcessPool:

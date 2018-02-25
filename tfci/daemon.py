@@ -37,6 +37,7 @@ class Daemon:
     name = 'default'
     version = '0.0.1'
     description = 'default daemon'
+    is_daemon = True
 
     def __init__(self, settings: 'tfci.settings.Settings', **kwargs):
         self.settings = settings
@@ -90,14 +91,16 @@ class Daemon:
     def startup(self):
         self.settings.setup_logging()
 
-        self.logger().info(f'Daemon {self.ident_key} started up')
-        self.lease = self.settings.get_db().lease(self.lease_time, lease_id=hash(self.ident_key))
+        if self.is_daemon:
 
-        self.settings.get_db().put(
-            self.ident_key,
-            self.get_status().serialize(),
-            lease=self.lease
-        )
+            self.logger().info(f'Daemon {self.ident_key} started up')
+            self.lease = self.db.lease(self.lease_time, lease_id=hash(self.ident_key))
+
+            self.db.put(
+                self.ident_key,
+                self.get_status().serialize(),
+                lease=self.lease
+            )
 
     def lease_renew(self, should_log=True):
         self.lease_last = time_now()
@@ -106,15 +109,19 @@ class Daemon:
             self.logger().info(f'Remaining lease TTL: {resp.TTL}')
 
     def run(self):
-        while True:
+        """
+         while True:
             self.logger().info('Ping')
             self.lease_renew()
             self.lease.refresh()
             time.sleep(1)
             for x in self.settings.get_db().get_prefix('/daemons/'):
                 print(x)
+        """
+        raise NotImplementedError('')
 
     def teardown(self):
-        self.logger().info('Exitting')
-        self.lease.revoke()
-        self.logger().info('Exited')
+        if self.is_daemon:
+            self.logger().info('Exitting')
+            self.lease.revoke()
+            self.logger().info('Exited')

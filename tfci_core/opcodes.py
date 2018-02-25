@@ -20,8 +20,11 @@ class NopOpcode(SysOpcodeDef):
         return FollowUp.new(a)
 
 
-def push_pop(csf: StackFrame, ctx: ExecutionContext):
-    for arg in ctx.args:
+def push_pop(csf: StackFrame, ctx: ExecutionContext, args=None):
+    if args is None:
+        args = ctx.args
+
+    for arg in args:
         if isinstance(arg, Identifier):
             csf.set(arg.name, ctx.stack_get(arg.name, arg.level))
         elif isinstance(arg, Constant):
@@ -45,9 +48,23 @@ class PushOpcode(SysOpcodeDef):
     def fn(self, ctx: ExecutionContext) -> FollowUp:
         # how do we know which stacks have been changed ?
 
-        csf = StackFrame.new()
+        csf = StackFrame.new(uuid4().hex)
 
         push_pop(csf, ctx)
+
+        return FollowUp.new(create_threads=[ctx.thread.update(ip=ctx.nip, sp=[csf.id] + ctx.thread.sp)],
+                            create_stacks=[csf])
+
+
+class PullOpcode(SysOpcodeDef):
+    name = 'pull'
+
+    def fn(self, ctx: ExecutionContext) -> FollowUp:
+        # how do we know which stacks have been changed ?
+
+        csf = StackFrame.load(ctx.singleton.db, ctx.resolve_arg(0))
+
+        push_pop(csf, ctx, ctx.args[1:])
 
         return FollowUp.new(create_threads=[ctx.thread.update(ip=ctx.nip, sp=[csf.id] + ctx.thread.sp)],
                             create_stacks=[csf])

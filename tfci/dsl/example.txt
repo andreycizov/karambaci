@@ -218,7 +218,7 @@ ld _d %0
 
 
 entrypoint_http:
-http_rep req_id hooray="OK" v=v h=h action=action item=item
+http_rep req_id hooray="OK" v=^v h=^h action=action item=item
 clr
 hlt
 

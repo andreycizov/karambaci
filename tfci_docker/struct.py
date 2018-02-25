@@ -1,14 +1,13 @@
 import json
 import os
 import tempfile
-from abc import ABCMeta, abstractmethod, abstractclassmethod
 from enum import Enum
-from json import JSONDecodeError
-from typing import NamedTuple, Union, Dict, Optional, TypeVar, Type
+from typing import NamedTuple, Union
 
 import docker
 from docker.tls import TLSConfig
-from etcd3 import Etcd3Client
+
+from tfci.mapper import MapperBase, NamedTupleEx
 
 
 class Auth(Enum):
@@ -27,72 +26,10 @@ AUTH_MAP = {
 
 AUTH_MAP_REV = {v: k for k, v in AUTH_MAP.items()}
 
-T = TypeVar('T')
 
-
-class ORMMeta:
-    __metaclass__ = ABCMeta
-
-    @classmethod
-    @abstractmethod
-    def key_fn(self, id) -> str:
-        return f'/{id}'
-
-    @property
-    def key(self):
-        return self.key_fn(self.id)
-
-    @classmethod
-    def delete(cls, db: Etcd3Client, id):
-        return db.transactions.version(cls.key_fn(id)) > 0, db.transactions.delete(cls.key_fn(id))
-
-    @classmethod
-    def load(cls, db: Etcd3Client, id):
-        return db.transactions.version(cls.key_fn(id)) > 0, db.transactions.get(cls.key_fn(id))
-
-    @abstractmethod
-    def serialize(self) -> str:
-        return ''
-
-    @classmethod
-    def deserialize(cls: Type[T], id, version, bts) -> T:
-        return cls()
-
-    @classmethod
-    def deserialize_range(cls: Type[T], items) -> Optional[T]:
-        if items is None:
-            return None
-        elif len(items) == 0:
-            return None
-        elif len(items) > 1:
-            assert False, f'you are deserializing a range that is too long? {range}'
-
-        (it, meta), *_ = items
-
-        id = meta.key.decode()[len(cls.key_fn('')):]
-        return cls.deserialize(id, meta.version, it)
-
-    @classmethod
-    def load_all(cls: Type[T], db: Etcd3Client) -> Dict[str, T]:
-        r = {}
-
-        prefix = cls.key_fn('')
-
-        for v, v_m in db.get_prefix(prefix):
-            k = v_m.key.decode()[len(prefix):]
-            try:
-                r[k] = cls.deserialize(k, v_m.version, v)
-            except Exception as e:
-                raise ValueError(f'While deserializing ID={k}: {e}')
-
-        return r
-
-
-class ServerDef(NamedTuple, ORMMeta):
+class ServerDef(NamedTupleEx, MapperBase):
     id: str
-
     auth: Union[CertAuth]
-
     host: str
     port: int
     version: int
@@ -101,16 +38,16 @@ class ServerDef(NamedTuple, ORMMeta):
         return f'ServerDef(id={self.id}, auth={self.auth_type.value}, host={self.host}, port={self.port}, version={self.version})'
 
     @classmethod
+    def new(cls, id, auth, host, port):
+        return ServerDef(id, auth, host, port, -1)
+
+    @classmethod
     def key_fn(cls, id):
         return f'/docker/servers/{id}'
 
     @property
     def auth_type(self) -> Auth:
         return AUTH_MAP_REV[self.auth.__class__]
-
-    @property
-    def key(self):
-        return self.key_fn(self.id)
 
     def serialize(self):
         return json.dumps([[self.auth_type.value, self.auth._asdict()], self.host, self.port])
@@ -124,13 +61,6 @@ class ServerDef(NamedTuple, ORMMeta):
         auth = auth_cls(**auth_val)
 
         return ServerDef(id, auth, *other, version)
-
-    @classmethod
-    def new(cls, id, auth, host, port):
-        return ServerDef(id, auth, host, port, -1)
-
-    def create(self, db: Etcd3Client):
-        return db.transactions.version(self.key) == 0, db.transactions.put(self.key, self.serialize())
 
     def client(self):
         return DockerWrapper(self)
