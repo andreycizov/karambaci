@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
-from tfci.mapper import NamedTupleEx, MapperBase
+from tfci.db.mapper import NamedTupleEx, MapperBase
 from tfci_core.const import JOBS_THREAD, JOBS_LOCK, JOBS_STACK
 
 UNSET = object()

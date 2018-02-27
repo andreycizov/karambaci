@@ -1,12 +1,12 @@
 import json
 import logging
-from typing import NamedTuple, Dict, Any, List, Optional, TypeVar, Type
+from typing import Dict, Any, List, Optional
 from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
-from tfci_core.daemons.worker.struct import ThreadContext, StackFrame
-from tfci.mapper import MapperBase, NamedTupleEx
+from tfci_core.daemons.worker.struct import StackFrame
+from tfci.db.mapper import MapperBase, NamedTupleEx
 from tfci_std.struct import FrozenThreadContext
 
 logger = logging.getLogger(__name__)

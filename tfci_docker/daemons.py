@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from uuid import uuid4
 
 from tfci.daemon import Daemon
-from tfci.mapper import EntityManager
+from tfci.db.manager import EntityManager
 from tfci_docker.struct import ServerDef, Auth, CertAuth
 
 

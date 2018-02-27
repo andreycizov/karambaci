@@ -7,7 +7,7 @@ from typing import NamedTuple, Union
 import docker
 from docker.tls import TLSConfig
 
-from tfci.mapper import MapperBase, NamedTupleEx
+from tfci.db.mapper import MapperBase, NamedTupleEx
 
 
 class Auth(Enum):

@@ -5,11 +5,11 @@ from enum import Enum
 from multiprocessing import Queue
 from typing import NamedTuple, Iterator, List, Union, Type, Optional
 
-from etcd3 import utils, Etcd3Client, exceptions
-from etcd3.events import DeleteEvent, PutEvent, Event
+from etcd3 import utils, Etcd3Client
+from etcd3.events import DeleteEvent, PutEvent
 from etcd3.transactions import BaseCompare, Put, Get, Delete
 
-from tfci.mapper import MapperBase
+from tfci.db.mapper import MapperBase
 
 logger = logging.getLogger(__name__)
 
