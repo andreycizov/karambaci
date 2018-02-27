@@ -16,7 +16,7 @@ from tfci.settings import Settings
 from tfci.time import time_now
 from tfci_core.daemons.db_util import watch_range_single, Ev
 from tfci_core.daemons.generic.pool import argv_decode, argv_encode
-from tfci_core.daemons.worker.struct import StackFrame
+from tfci.dsm.struct import StackFrame
 from tfci_http.struct import RouteDef, Request, Reply
 from tfci_std.struct import FrozenThreadContext
 

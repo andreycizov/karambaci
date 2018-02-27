@@ -7,7 +7,7 @@ from tfci.dsl.compiler import load_test_program
 from tfci.dsl.exception import CompilerException
 from tfci.dsl.struct import ProgramDefinition
 from tfci.dsm.executor import ExecutionError, ExecutionSingleton, ExecutionContext
-from tfci_core.daemons.worker.struct import ThreadContext, FollowUp
+from tfci.dsm.struct import FollowUp, ThreadContext
 from tfci_core.daemons.generic.pool import WorkerInstance
 from tfci.settings import Settings
 

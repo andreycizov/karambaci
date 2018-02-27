@@ -1,11 +1,11 @@
 import json
-from typing import Dict, NamedTuple, Optional, Tuple, List
+from typing import Dict, NamedTuple, List, Tuple, Optional
 from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
 from tfci.db.mapper import NamedTupleEx, MapperBase
-from tfci_core.const import JOBS_THREAD, JOBS_LOCK, JOBS_STACK
+from tfci_core.const import JOBS_STACK, JOBS_THREAD, JOBS_LOCK
 
 UNSET = object()
 

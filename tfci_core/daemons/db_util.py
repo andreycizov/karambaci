@@ -14,6 +14,11 @@ from tfci.db.mapper import MapperBase
 logger = logging.getLogger(__name__)
 
 
+class Database:
+    def __init__(self, db: Etcd3Client):
+        self.db = db
+
+
 def watch_range(db, key, cb):
     kwargs = {}
     kwargs['range_end'] = \

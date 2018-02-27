@@ -13,7 +13,7 @@ from tfci_core.daemons.worker.worker import ThreadExecutorInstance
 from tfci_core.const import JOBS_THREAD, JOBS_LOCK
 from tfci_core.daemons.db_util import watch_range
 from tfci_core.daemons.generic.pool import TaskProcessPool
-from tfci_core.daemons.worker.struct import ThreadContext
+from tfci.dsm.struct import ThreadContext
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,8 @@ class WorkerDaemon(Daemon):
     def lock_put(self, key, val):
         self.lock[key] = val
 
-        if key in self.pool:
-            self.pool.resign(key)
+        # if key in self.pool:
+        #     self.pool.cancel(key)
 
     def lock_delete(self, key):
         if key in self.lock:
@@ -74,8 +74,8 @@ class WorkerDaemon(Daemon):
 
             if key in self.ctx:
                 self.ctx_lock_change(key)
-            elif key in self.pool:
-                self.pool.resign(key)
+            # elif key in self.pool:
+            #     self.pool.cancel(key)
         else:
             if key in self.ctx:
                 self.ctx_lock_change(key)

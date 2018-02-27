@@ -6,7 +6,7 @@ from tfci.dsl.ast import Constant, Identifier, Map, Command
 from tfci.dsl.exception import CompilerException
 from tfci.dsl.struct import OpcodeArgs
 from tfci.dsm.executor import ExecutionContext
-from tfci_core.daemons.worker.struct import FollowUp
+from tfci.dsm.struct import FollowUp
 
 T = TypeVar('T')
 

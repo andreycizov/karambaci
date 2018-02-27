@@ -6,7 +6,7 @@ from tfci.dsl.ast import Command
 from tfci.dsl.exception import CompilerException
 from tfci.opcode import OpcodeDef, OpArg, RefOpArg, SysOpcodeDef
 from tfci.dsm.executor import ExecutionError, ExecutionContext
-from tfci_core.daemons.worker.struct import FollowUp
+from tfci.dsm.struct import FollowUp
 from tfci_std.struct import FrozenThreadContext
 
 

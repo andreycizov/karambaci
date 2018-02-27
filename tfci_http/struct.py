@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
-from tfci_core.daemons.worker.struct import StackFrame
+from tfci.dsm.struct import StackFrame
 from tfci.db.mapper import MapperBase, NamedTupleEx
 from tfci_std.struct import FrozenThreadContext
 

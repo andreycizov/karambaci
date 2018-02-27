@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from tfci.daemon import Daemon
 from tfci.db.manager import EntityManager
-from tfci_core.daemons.worker.struct import StackFrame, ThreadContext
+from tfci.dsm.struct import StackFrame, ThreadContext
 from tfci_std.struct import FrozenThreadContext
 
 

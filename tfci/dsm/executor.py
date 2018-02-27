@@ -5,7 +5,7 @@ from etcd3 import Etcd3Client
 from tfci.dsl.ast import Identifier, Constant
 from tfci.dsl.struct import OpcodeArgs
 from tfci.settings import Settings
-from tfci_core.daemons.worker.struct import ThreadContext, StackFrame
+from tfci.dsm.struct import StackFrame, ThreadContext
 
 
 class ExecutionError(Exception):

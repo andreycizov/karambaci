@@ -4,7 +4,7 @@ from typing import List
 from etcd3 import Etcd3Client
 
 from tfci.db.mapper import MapperBase, NamedTupleEx
-from tfci_core.daemons.worker.struct import ThreadContext, StackFrame
+from tfci.dsm.struct import StackFrame, ThreadContext
 
 
 class FrozenThreadContext(NamedTupleEx, MapperBase):

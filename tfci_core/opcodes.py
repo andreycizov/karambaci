@@ -5,7 +5,7 @@ from tfci.dsl.exception import CompilerException
 from tfci.dsl.struct import OpcodeArgs
 from tfci.dsm.executor import ExecutionError, ExecutionContext
 from tfci.opcode import opcode, SysOpcodeDef
-from tfci_core.daemons.worker.struct import FollowUp, StackFrame, ThreadContext
+from tfci.dsm.struct import StackFrame, FollowUp, ThreadContext
 
 
 class NopOpcode(SysOpcodeDef):
