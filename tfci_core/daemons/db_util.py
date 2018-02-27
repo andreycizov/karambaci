@@ -3,10 +3,13 @@ import multiprocessing
 import queue
 from enum import Enum
 from multiprocessing import Queue
-from typing import NamedTuple, Iterator
+from typing import NamedTuple, Iterator, List, Union, Type, Optional
 
 from etcd3 import utils, Etcd3Client, exceptions
 from etcd3.events import DeleteEvent, PutEvent, Event
+from etcd3.transactions import BaseCompare, Put, Get, Delete
+
+from tfci.mapper import MapperBase
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,10 @@ class RangeEvent(NamedTuple):
     event: Ev
     body: bytes
     version: int
+
+    @property
+    def key(self):
+        return self.prefix + self.ident
 
 
 def watch_range_queue(queue: Queue, db: Etcd3Client, prefix):
@@ -61,6 +68,70 @@ def queue_try(route_queue) -> Iterator[RangeEvent]:
             return
 
 
+TX_COMPARE = BaseCompare
+TX_MOD = Union[Put, Delete, Get]
+
+
+class Transaction(NamedTuple):
+    compare: List[BaseCompare]
+    success: List[TX_MOD]
+    failure: List[TX_MOD]
+
+    @classmethod
+    def new(cls, compare=None, success=None, failure=None):
+        if compare is None:
+            compare = []
+
+        if success is None:
+            success = []
+
+        if failure is None:
+            failure = []
+
+        return Transaction(compare, success, failure)
+
+    def __and__(self, o: 'Transaction'):
+        return Transaction(
+            self.compare + o.compare,
+            self.success + o.success,
+            self.failure + o.failure,
+        )
+
+    def exec(
+        self,
+        db: Etcd3Client,
+        ok_map: Optional[List[Optional[Type[MapperBase]]]] = None,
+        fail_map: Optional[List[Optional[Type[MapperBase]]]] = None
+    ):
+        ok, items = db.transaction(
+            compare=self.compare,
+            success=self.success,
+            failure=self.failure,
+        )
+
+        if ok and ok_map:
+            assert len(items) == len(ok_map)
+
+            return ok, [y.deserialize_range(z) for z, y in zip(items, ok_map) if y]
+        if not ok and fail_map:
+            assert len(items) == len(fail_map)
+
+            return ok, [y.deserialize_range(z) for z, y in zip(items, fail_map) if y]
+
+        return ok, items
+
+
+class Watch(NamedTuple):
+    db: Etcd3Client
+    queue: queue.Queue
+
+    @classmethod
+    def new(cls, db):
+        return Watch(db, queue.Queue())
+
+    def register(self, prefix) -> 'WatchToken':
+        return WatchToken(self.db, self.queue, watch_range_queue(self.queue, self.db, prefix))
+
 
 class WatchToken(NamedTuple):
     db: Etcd3Client
@@ -73,9 +144,11 @@ class WatchToken(NamedTuple):
 
     def get(self, timeout=0, close=True) -> RangeEvent:
         try:
-            return self.queue.get(timeout=timeout)
+            r = self.queue.get(timeout=timeout)
+
+            return r
         except queue.Empty:
-            raise TimeoutError('')
+            raise TimeoutError('Queue had reached a timeout')
         finally:
             if close:
                 self.db.cancel_watch(self.id)

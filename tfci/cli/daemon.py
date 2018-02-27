@@ -15,7 +15,7 @@ def load_settings():
 def main():
     settings = load_settings()
 
-    parser = argparse.ArgumentParser(prog='tfci-daemon-start')
+    parser = argparse.ArgumentParser(prog='tfci')
 
     daemons_list = settings.get_daemons()
 

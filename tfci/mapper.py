@@ -1,3 +1,4 @@
+import logging
 from argparse import ArgumentParser
 from enum import Enum
 from typing import Type, Optional, Dict, TypeVar, NamedTupleMeta
@@ -5,13 +6,21 @@ from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
+from tfci_core.daemons.db_util import RangeEvent
+
 T = TypeVar('T')
+
+logger = logging.getLogger(__name__)
 
 
 class MapperBase:
     @classmethod
     def key_fn(self, id) -> str:
         raise NotImplementedError('')
+
+    @classmethod
+    def key_fn_rev(cls, key):
+        return key[len(cls.key_fn('')):]
 
     def serialize(self) -> str:
         raise NotImplementedError('')
@@ -47,6 +56,10 @@ class MapperBase:
     @classmethod
     def load(cls, db: Etcd3Client, id):
         return cls.exists(db, id), db.transactions.get(cls.key_fn(id))
+
+    @classmethod
+    def deserialize_watch(cls: Type[T], ev: RangeEvent):
+        return cls.deserialize(cls.key_fn_rev(ev.key), ev.version, ev.body)
 
     @classmethod
     def deserialize_range(cls: Type[T], items) -> Optional[T]:
@@ -128,6 +141,12 @@ class EntityManager:
         util_rm = utility_args.add_parser(EntityAction.Remove.value, help=f'remove {cls.entity}')
         cls.arguments_rm(util_rm)
 
+        cls._arguments_else(args, utility_args)
+
+    @classmethod
+    def _arguments_else(cls, args: ArgumentParser, utility_args):
+        pass
+
     @classmethod
     def arguments_ls(cls, args: ArgumentParser):
         pass
@@ -148,14 +167,13 @@ class EntityManager:
         )
 
     def action(self, utility, **kwargs):
-        utility = EntityAction(utility)
-        if utility == EntityAction.List:
+        if utility == EntityAction.List.value:
             hdr = f'----- Listing {self.entity} -------'
             print(hdr)
             for k, v in self.action_ls(**kwargs).items():
                 print(k, v)
             print('-' * len(hdr))
-        elif utility == EntityAction.Add:
+        elif utility == EntityAction.Add.value:
             id = kwargs['id']
 
             if id is None:
@@ -172,7 +190,7 @@ class EntityManager:
                 print('OK')
             else:
                 print('Failure')
-        elif utility == EntityAction.Remove:
+        elif utility == EntityAction.Remove.value:
             check, succ = self.action_rm(**kwargs)
 
             ok, _ = self.db.transaction(compare=check, success=succ, failure=[])
@@ -182,7 +200,7 @@ class EntityManager:
             else:
                 print('Failure')
         else:
-            raise NotImplementedError(str(utility))
+            self._action_else(utility, **kwargs)
 
     def action_ls(self, **kwargs):
         return self.model.load_all(self.db)
@@ -193,3 +211,6 @@ class EntityManager:
     def action_rm(self, id, **kwargs):
         a, b = self.model.delete(self.db, id)
         return [a], [b]
+
+    def _action_else(self, utility, **kwargs):
+        logger.warning(f'Unknown action: {utility}')

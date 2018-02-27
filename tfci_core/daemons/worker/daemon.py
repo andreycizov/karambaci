@@ -3,6 +3,7 @@ import multiprocessing
 import queue
 import signal
 from argparse import ArgumentParser
+from typing import Optional
 from uuid import uuid4
 
 from etcd3.events import DeleteEvent, PutEvent
@@ -34,7 +35,7 @@ class WorkerDaemon(Daemon):
 
         self.route_queue = self.manager.Queue()  # type: Queue
         self.running = True
-        self.pool = None
+        self.pool = None  # type: Optional[TaskProcessPool]
 
     @classmethod
     def arguments(cls, args: ArgumentParser):
@@ -64,37 +65,33 @@ class WorkerDaemon(Daemon):
     def lock_put(self, key, val):
         self.lock[key] = val
 
+        if key in self.pool:
+            self.pool.resign(key)
+
     def lock_delete(self, key):
         if key in self.lock:
-            #self.settings.get_logger().debug(f'LockID={key}: RELEASED')
             del self.lock[key]
 
             if key in self.ctx:
                 self.ctx_lock_change(key)
-            # todo: if lock had been removed and we're still working on this task - then kill the task.
+            elif key in self.pool:
+                self.pool.resign(key)
         else:
-            #self.settings.get_logger().error(f'LockID={key}: UNKNOWN')
-
             if key in self.ctx:
                 self.ctx_lock_change(key)
 
     def ctx_lock_change(self, key):
         if self.lock.get(key):
-            #self.settings.get_logger().info(f'Ignoring {key} -> LOCK SET')
             return
 
         if not self.pool.available:
-            #self.settings.get_logger().info(f'Ignoring {key} -> POOL FULL')
             return
 
         if key not in self.pool and key in self.ctx:
-            #self.settings.get_logger().info(f'Assigned {key}')
             self.pool.assign(key, self.ctx[key])
 
     def ctx_pool_fill(self):
         ctxs = [x for x in self.ctx.keys() if x not in self.lock]
-
-        # logger.info(f'{self.pool.available} {len(ctxs)} {self.lease_wait_max}')
 
         while self.pool.available > 0 and len(ctxs) and self.lease_wait_max > 0:
             item = ctxs.pop()
@@ -148,9 +145,6 @@ class WorkerDaemon(Daemon):
                                     create_cb(self.route_queue, self.daemon_put, self.daemon_delete))
 
         self.watches = [watch_id1, watch_id2, watch_daemons]
-
-    # def task_handle(self, task_id, task):
-    #
 
     def watch_stop(self):
         for w in self.watches:

@@ -3,54 +3,27 @@ from argparse import ArgumentParser
 from uuid import uuid4
 
 from tfci.daemon import Daemon
+from tfci.mapper import EntityManager
 from tfci_docker.struct import ServerDef, Auth, CertAuth
 
 
-class ConfDaemon(Daemon):
-    name = 'conf'
-    description = 'docker configurator'
-
-    def __init__(self, utility, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.utility = utility
-        self.args = args
-        self.kwargs = kwargs
+class ServerDefManager(EntityManager):
+    entity = ServerDef.__name__
+    model = ServerDef
 
     @classmethod
-    def arguments(cls, args: ArgumentParser):
-        utility_args = args.add_subparsers(
-            title="utility",
-            dest="utility",
-            help="select the utility to run",
-            metavar='UTILITY',
-        )
-        utility_args.required = True
-
-        util_list = utility_args.add_parser('ls', help=f'list servers')
-        util_add = utility_args.add_parser('add', help=f'add a server')
+    def _arguments_else(cls, args: ArgumentParser, utility_args):
         util_test = utility_args.add_parser('test', help=f'test a server')
-
-
-
-        util_rm = utility_args.add_parser('rm', help=f'remove a server')
 
         util_test.add_argument(
             dest='id',
         )
 
-        util_rm.add_argument(
-            dest='id',
-        )
+    @classmethod
+    def arguments_add(cls, args: ArgumentParser):
+        super().arguments_add(args)
 
-        util_add.add_argument(
-            '-I',
-            dest='id',
-            required=False,
-            default=None,
-            help="ID to use for idempotent deployment (leave blank for auto)"
-        )
-
-        util_add.add_argument(
+        args.add_argument(
             '-P',
             dest='port',
             type=int,
@@ -58,11 +31,11 @@ class ConfDaemon(Daemon):
             help="server port (DEFAULT: %(default)s)"
         )
 
-        util_add.add_argument(
+        args.add_argument(
             dest='host',
         )
 
-        auth_sub = util_add.add_subparsers(
+        auth_sub = args.add_subparsers(
             title='auth',
             dest='auth_type',
             help='select the authentication type',
@@ -90,59 +63,40 @@ class ConfDaemon(Daemon):
             help='client key file',
         )
 
-    def run(self):
-        if self.utility == 'ls':
-            print('LISTING')
-            for k, v in ServerDef.load_all(self.db).items():
-                print(k, v)
-        elif self.utility == 'add':
-            id = self.kwargs['id']
-            host = self.kwargs['host']
-            port = self.kwargs['port']
+    def action_add(self, **kwargs):
+        id = kwargs['id']
+        host = kwargs['host']
+        port = kwargs['port']
 
-            auth_type = self.kwargs['auth_type']
+        auth_type = kwargs['auth_type']
 
-            auth = None
+        auth = None
 
-            if auth_type == Auth.Tls.value:
-                ca_cert = self.kwargs['ca_cert'].read()
-                client_cert = self.kwargs['client_cert'].read()
-                client_key = self.kwargs['client_key'].read()
+        if auth_type == Auth.Tls.value:
+            ca_cert = kwargs['ca_cert'].read()
+            client_cert = kwargs['client_cert'].read()
+            client_key = kwargs['client_key'].read()
 
-                auth = CertAuth(ca_cert, client_cert, client_key)
-            else:
-                raise NotImplementedError(f'{auth_type}')
+            auth = CertAuth(ca_cert, client_cert, client_key)
+        else:
+            raise NotImplementedError(f'{auth_type}')
 
-            if id is None:
-                id = uuid4().hex
-                print('Generated a new ID', id)
+        if id is None:
+            id = uuid4().hex
+            print('Generated a new ID', id)
 
-            srvr = ServerDef.new(
-                id,
-                auth,
-                host,
-                port
-            )
+        srvr = ServerDef.new(
+            id,
+            auth,
+            host,
+            port
+        )
 
-            check, mod = srvr.create(self.db)
+        return srvr.create(self.db)
 
-            ok, _ = self.db.transaction(compare=[check], success=[mod], failure=[])
-
-            if ok:
-                print('OK')
-            else:
-                print('Failure')
-        elif self.utility == 'rm':
-            check, mod = ServerDef.delete(self.db, self.kwargs['id'])
-
-            ok, _ = self.db.transaction(compare=[check], success=[mod], failure=[])
-
-            if ok:
-                print('OK')
-            else:
-                print('Failure')
-        elif self.utility == 'test':
-            check, mod = ServerDef.load(self.db, self.kwargs['id'])
+    def _action_else(self, utility, **kwargs):
+        if utility == 'test':
+            check, mod = self.model.load(self.db, kwargs['id'])
 
             ok, ret = self.db.transaction(compare=[check], success=[mod], failure=[])
 
@@ -157,6 +111,23 @@ class ConfDaemon(Daemon):
                     print(dckr.version())
             else:
                 print('Failure')
-
         else:
-            raise NotImplementedError(self.utility)
+            raise NotImplementedError('')
+
+
+class ConfDaemon(Daemon):
+    name = 'conf'
+    description = 'docker configurator'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.utility = utility
+        self.args = args
+        self.kwargs = kwargs
+
+    @classmethod
+    def arguments(cls, args: ArgumentParser):
+        ServerDefManager.arguments(args)
+
+    def run(self):
+        ServerDefManager(self.db).action(**self.kwargs)

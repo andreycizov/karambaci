@@ -1,7 +1,0 @@
-- exception handling and exception handler setup
-- deployment versioning (workers filter for the thread IDs which are based on the preselected prefix in their context)
-   + what should happen to threads which stall ? e.g. threads which have outlived their deployment ?
-- code caching and code storage
-- transform the HTTP worker to using the FrozenThreadContext instead.
-- implement cli for stack creation
-- implement cli for thread creation

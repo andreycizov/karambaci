@@ -35,7 +35,33 @@ class ThreadExecutorInstance(WorkerInstance):
         self.opcodes = {x.name: x for x in self.settings.get_opcodes()}
         self.p_filename, self.p_text, self.program = load_test_program(self.opcodes)
 
+    def gen_trace(self, pdi, stack, thread):
+        print('TRACE', self.ident, thread.id, thread.ip, pdi.opcode, pdi.args, pdi.next_label)
+        for s in stack:
+            print('\t', s)
+        print('ENDTRACE')
+
+    def gen_exc(self, pdi, stack, tid, tip, thread_orig, tsp):
+        logger.exception(f'ExecutionError TID=`{tid}` IP=`{tip}` OSP={thread_orig.sp} SP={tsp} Stacks={stack}')
+
+        if pdi:
+            logger.error('CODE')
+            x = CompilerException(pdi.loc, "The exception happened here:").with_text(self.p_text).with_filename(
+                self.p_filename)
+
+            logger.error(str(x))
+            logger.error('CODE_NOT')
+        if stack:
+            logger.error('STACK')
+
+            for s in stack:
+                logger.error(f'\t{s}')
+
+            logger.error('STACK_NOT')
+
     def __call__(self, thread_id, thread_orig: ThreadContext) -> Tuple[bool, Optional[ThreadContext]]:
+        # purpose: test the executor.
+
         # the issue is that a ThreadExecutorInstance must not be able to reload the code at all (?)
         # it needs to be able to use a centralised cache located in the daemon
 
@@ -46,23 +72,6 @@ class ThreadExecutorInstance(WorkerInstance):
         tsp = thread.sp if thread else None
         pdi = self.program[tip] if tip else None
 
-        def gen_exc():
-            logger.exception(f'ExecutionError TID=`{tid}` IP=`{tip}` OSP={thread_orig.sp} SP={tsp} Stacks={stack}')
-
-            if pdi:
-                logger.error('CODE')
-                x = CompilerException(pdi.loc, "The exception happened here:").with_text(self.p_text).with_filename(
-                    self.p_filename)
-
-                logger.error(str(x))
-                logger.error('CODE_NOT')
-            if stack:
-                logger.error('STACK')
-
-                for s in stack:
-                    logger.error(f'\t{s}')
-
-                logger.error('STACK_NOT')
 
         try:
             if not ok:
@@ -75,10 +84,9 @@ class ThreadExecutorInstance(WorkerInstance):
             if thread.ip not in self.program:
                 raise ExecutionError(f'Thread `{thread.id}` IP=`{thread.ip}` could not be found')
 
-            print('TRACE', self.ident, thread.id, thread.ip, pdi.opcode, pdi.args, pdi.next_label)
-            for s in stack:
-                print('\t', s)
-            print('ENDTRACE')
+            self.gen_trace(pdi, stack, thread)
+
+            # that's where we essentially execute anything.
 
             f = self.opcodes[pdi.opcode]()(
                 ExecutionContext(
@@ -89,18 +97,21 @@ class ThreadExecutorInstance(WorkerInstance):
                     stack
                 )
             )  # type: FollowUp
+
+            # FollowUp is not execution context.
+
         except ExecutionError as e:
             thread_orig.follow(
                 self.db, self.ident,
                 FollowUp.new()
             )
 
-            gen_exc()
+            self.gen_exc(pdi, stack, tid, tip, thread_orig, tsp)
             return False, None
         except:
             # everything that is not an execution error should be just retried
             thread_orig.unlock(self.db, self.ident)
-            gen_exc()
+            self.gen_exc(pdi, stack, tid, tip, thread_orig, tsp)
             return False, None
         else:
             ok, updated = thread_orig.follow(
