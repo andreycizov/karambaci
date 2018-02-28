@@ -78,7 +78,7 @@ class OpcodeDef:
 
     @classmethod
     def find_module(cls, mod) -> List[Type['OpcodeDef']]:
-        return [x for x in (getattr(mod, x) for x in dir(mod)) if inspect.isclass(x) and issubclass(x, OpcodeDef)]
+        return [x for x in (getattr(mod, x) for x in dir(mod)) if inspect.isclass(x) and issubclass(x, OpcodeDef) and x != OpcodeDef]
 
     def __call__(self, ctx: ExecutionContext) -> FollowUp:
         def map_args(args: OpcodeArgs):

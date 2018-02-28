@@ -17,3 +17,7 @@ class ProgramDefinitionItem(NamedTuple):
 
 
 ProgramDefinition = Dict[str, ProgramDefinitionItem]
+
+# ProgramPages = ProgramDefinition
+
+

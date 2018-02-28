@@ -64,7 +64,7 @@ class ThreadContext(NamedTupleEx, MapperBase):
     version: int
 
     @classmethod
-    def new(cls, id, ip, sp=None):
+    def new(cls, id: str, ip: str, sp=None):
         if sp is None:
             sp = []
         return ThreadContext(id, ip, sp, -1)
@@ -156,7 +156,16 @@ class ThreadContext(NamedTupleEx, MapperBase):
             db.transactions.value(self.lock_key) == lock_ident,
         ]
 
-        success = [db.transactions.delete(self.key)] if updated is None else []
+        # CREATE: THREAD
+        success = [
+            db.transactions.put(y.key, y.serialize()) for y in f.create_threads
+        ]
+
+        # UNLOCK
+
+        success += [db.transactions.delete(self.key)] if updated is None else []
+
+        # DELETE LOCK
 
         success += [
             db.transactions.delete(self.lock_key),
@@ -185,10 +194,7 @@ class ThreadContext(NamedTupleEx, MapperBase):
             db.transactions.delete(x.key) for x in f.delete_stacks
         ]
 
-        # CREATE: THREAD
-        success += [
-            db.transactions.put(y.key, y.serialize()) for y in f.create_threads
-        ]
+
 
         ok, _ = db.transaction(
             compare=compare,
@@ -211,3 +217,5 @@ class ThreadContext(NamedTupleEx, MapperBase):
         )
 
         return ok
+
+

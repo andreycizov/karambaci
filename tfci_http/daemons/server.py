@@ -1,6 +1,7 @@
 import multiprocessing
 import time
 from argparse import ArgumentParser
+from typing import Dict
 
 from tfci.daemon import Daemon
 from tfci.settings import TFException
@@ -62,6 +63,7 @@ class HTTPDaemon(Daemon):
 
     def run(self):
         self.routes = RouteDef.load_all(self.db)
+
 
         SUB_PREFIX = RouteDef.key_fn('')
 

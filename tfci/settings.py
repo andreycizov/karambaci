@@ -6,6 +6,9 @@ from typing import List, Iterator, Tuple, AnyStr, Type
 import etcd3
 
 import tfci
+import tfci.opcode
+import tfci.daemon
+from tfci.dsm.rt import OpcodeDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +75,15 @@ class Settings:
 
         return daemons
 
-    def get_opcodes(self) -> Iterator['tfci.opcode.SysOpcodeDef']:
-        opcodes = []
+    def get_opcodes(self) -> OpcodeDefinition:
+        opcodes = {}
 
         for plugin in self.plugins:
             for opcode in plugin.get_opcodes():
-                opcodes.append(opcode)
+                if opcode.name in opcodes:
+                    raise TFException(f'`{opcode.name}` is already defined in {opcodes[opcode.name]}')
+
+                opcodes[opcode.name] = opcode
 
         return opcodes
 
@@ -90,11 +96,24 @@ class Settings:
 
         self.get_logger().getChild('db').debug(f'Selected {x}')
 
-        return etcd3.client(
+        kwargs = dict(
             host=x['h'],
             port=x['p'],
-            ca_cert=x['ca'],
-            cert_cert=x['cert'],
-            cert_key=x['key'],
+        )
+
+        if 'ca' in x:
+            kwargs.update(dict(
+                ca_cert=x['ca'],
+                cert_cert=x['cert'],
+                cert_key=x['key'],
+            ))
+        elif 'u' in x:
+            kwargs.update(dict(
+                user=x['u'],
+                password=x['p'],
+            ))
+
+        return etcd3.client(
             timeout=x.get('t', 10),
+            **kwargs,
         )

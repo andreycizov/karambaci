@@ -2,7 +2,6 @@ from uuid import uuid4
 
 from tfci.dsl.ast import Identifier, Constant, Map, Command
 from tfci.dsl.exception import CompilerException
-from tfci.dsl.struct import OpcodeArgs
 from tfci.dsm.executor import ExecutionError, ExecutionContext
 from tfci.opcode import opcode, SysOpcodeDef
 from tfci.dsm.struct import StackFrame, FollowUp, ThreadContext
@@ -191,13 +190,18 @@ class HLTOpcode(SysOpcodeDef):
 class ForkOpcode(SysOpcodeDef):
     name = 'fork'
 
-    def fn(self, ctx: ExecutionContext) -> FollowUp:
-        if len(ctx.args) != 1:
-            raise ExecutionError(f'(fork) `{ctx.thread.id}:{ctx.thread.ip}` too many args: {ctx.args}')
+    def check(self, c: Command):
+        if len(c.args) != 2:
+            raise CompilerException(c.loc, f"{self.name} not enough args: {c.args} (must be 2)")
 
-        jmp = ctx.resolve_arg(0)
+    def fn(self, ctx: ExecutionContext) -> FollowUp:
+        if len(ctx.args) != 2:
+            raise ExecutionError(f'(fork) `{ctx.thread.id}:{ctx.thread.ip}` not enough args: {ctx.args}')
+
+        fork_id = ctx.resolve_arg(0)
+        jmp = ctx.resolve_arg(1)
 
         return FollowUp.new([
             ctx.thread.update(ip=ctx.nip),
-            ThreadContext.new(jmp, ctx.thread.sp),
+            ThreadContext.new(fork_id, jmp, ctx.thread.sp),
         ])

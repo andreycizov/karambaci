@@ -69,7 +69,7 @@ class MapperBase:
 
         (it, meta), *_ = items
 
-        id = meta.key.decode()[len(cls.key_fn('')):]
+        id = cls.key_fn_rev(meta.key.decode())
         return cls.deserialize(id, meta.version, it)
 
     @classmethod
@@ -79,7 +79,7 @@ class MapperBase:
         prefix = cls.key_fn('')
 
         for v, v_m in db.get_prefix(prefix):
-            k = v_m.key.decode()[len(prefix):]
+            k = cls.key_fn_rev(v_m.key.decode())
             try:
                 r[k] = cls.deserialize(k, v_m.version, v)
             except Exception as e:
@@ -106,5 +106,3 @@ class NamedTupleEx(metaclass=NamedTupleMetaEx):
 
     def __new__(self, *args, **kwargs):
         pass
-
-

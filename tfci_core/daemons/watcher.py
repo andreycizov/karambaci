@@ -1,7 +1,6 @@
 import time
 
 from tfci.daemon import Daemon
-from tfci_core.const import JOBS_THREAD, JOBS_LOCK, JOBS_STACK
 from tfci_core.daemons.db_util import watch_range
 
 
@@ -14,10 +13,6 @@ class WatcherDaemon(Daemon):
         super().__init__(**kwargs)
 
     def watch_restart(self):
-
-        # watch_id1 = watch_range(self.db, JOBS_THREAD % ('',), self.log_item)
-        # watch_id2 = watch_range(self.db, JOBS_LOCK % ('',), self.log_item)
-        # watch_id3 = watch_range(self.db, JOBS_STACK % ('',), self.log_item)
         watch_id3 = watch_range(self.db, '/', self.log_item)
         watch_daemons = watch_range(self.db, f'/daemons/{self.name}/', self.log_item)
 

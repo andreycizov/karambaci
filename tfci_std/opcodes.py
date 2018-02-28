@@ -33,6 +33,8 @@ class ExecOpcode(OpcodeDef):
                 item,
                 {'x': WrappedArgs(ctx, [ret] + list(args))}
             )
+        except ExecutionError:
+            raise
         except Exception as e:
             raise ExecutionError("Failed to exr") from e
 

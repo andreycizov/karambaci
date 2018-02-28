@@ -4,10 +4,6 @@ from pprint import pprint
 from tfci.settings import Settings
 
 PLUGINS = [
-    'tfci.plugin.core',
-    'tfci.plugin.docker',
-    'tfci.plugin.http',
-    'tfci.plugin.time',
 ]
 
 

@@ -1,5 +1,4 @@
-import os
-from typing import Dict, Type, Tuple
+from typing import Dict, Type
 
 from pyparsing import ParseException
 
@@ -49,7 +48,7 @@ def compiler_second_pass(lines: Lines) -> Lines:
     return Lines(rtn, loc=lines.loc)
 
 
-SupportedOpcodes = Dict[str, Type[tfci.opcode.OpcodeDef]]
+SupportedOpcodes = Dict[str, tfci.opcode.OpcodeDef]
 
 
 def compiler_third_pass(lines: Lines, supported_opcodes: SupportedOpcodes) -> Lines:
@@ -76,7 +75,7 @@ def compiler_third_pass(lines: Lines, supported_opcodes: SupportedOpcodes) -> Li
         ids_defined[x.label.name] = x
 
         if x.opcode.name in supported_opcodes:
-            supported_opcodes[x.opcode.name]().check(x)
+            supported_opcodes[x.opcode.name].check(x)
         else:
             raise CompilerException(
                 x.opcode.loc,
@@ -110,11 +109,4 @@ def compiler_compile_text(filename, text, supported_opcodes) -> ProgramDefinitio
         e = e.with_filename(filename).with_text(text)
         raise e from None
 
-
-def load_test_program(supported_opcodes) -> Tuple[str, str, ProgramDefinition]:
-    filename = os.path.join(os.path.dirname(__file__), 'example.txt')
-    with open(filename) as f_in:
-        text = f_in.read()
-
-        return filename, text, compiler_compile_text(filename, text, supported_opcodes)
 

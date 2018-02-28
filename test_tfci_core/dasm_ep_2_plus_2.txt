@@ -1,0 +1,5 @@
+ep_2_plus_2:
+exr "x[0] + x[1]" x %2
+# clr
+hlt
+

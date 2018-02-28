@@ -1,10 +1,9 @@
-from typing import NamedTuple, Optional, List
+from typing import NamedTuple, Optional, List, Set
 
 from etcd3 import Etcd3Client
 
 from tfci.dsl.ast import Identifier, Constant
 from tfci.dsl.struct import OpcodeArgs
-from tfci.settings import Settings
 from tfci.dsm.struct import StackFrame, ThreadContext
 
 
@@ -13,24 +12,35 @@ class ExecutionError(Exception):
 
 
 class ExecutionSingleton:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self._db = None  # type: Optional[Etcd3Client]
+    # a singleton is essentially an interface to the world for all of the opcodes.
+    def __init__(self, db: Etcd3Client):
+        self._db = db  # type: Optional[Etcd3Client]
 
     @property
     def db(self) -> Etcd3Client:
-        if self._db is None:
-            self._db = self.settings.get_db()
         return self._db
 
 
 class ExecutionContext(NamedTuple):
     singleton: ExecutionSingleton
+
     args: OpcodeArgs
     nip: Optional[str]
     thread: ThreadContext
     stack: List[StackFrame]
-    stacks_updated: set = set()
+    stacks_updated: Set[int]
+
+    @classmethod
+    def new(
+        self,
+        singleton: ExecutionSingleton,
+
+        args: OpcodeArgs,
+        nip: Optional[str],
+        thread: ThreadContext,
+        stack: List[StackFrame]
+    ):
+        return ExecutionContext(singleton, args, nip, thread, stack, set())
 
     def resolve_item(self, arg):
         if isinstance(arg, Identifier):
@@ -49,7 +59,7 @@ class ExecutionContext(NamedTuple):
 
         if r is None:
             raise ExecutionError(
-                f'(push) `{self.thread.id}:{self.thread.ip}` stack at level=`{level}` is NULL') from None
+                f'(stack_load) `{self.thread.id}:{self.thread.ip}` stack at level=`{level}` is NULL') from None
         return r
 
     def stack_get(self, name, level=0):
@@ -57,21 +67,22 @@ class ExecutionContext(NamedTuple):
             return self.stack_load(level).get(name)
         except IndexError:
             raise ExecutionError(
-                f'(push) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but Levels=`{len(self.stack)}`') from None
+                f'(stack_get) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but Levels=`{len(self.stack)}`') from None
         except KeyError:
             raise ExecutionError(
-                f'(push) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but name does not exist') from None
+                f'(stack_get) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but name does not exist') from None
 
     def stack_set(self, val, name, level=0):
         try:
+            stack_idx = self.stack_idx(level)
             self.stack_load(level).set(name, val)
-            self.stacks_updated.add(self.stack_idx(level))
+            self.stacks_updated.add(stack_idx)
         except IndexError:
             raise ExecutionError(
-                f'(push) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but Levels=`{len(self.stack)}`')
+                f'(stack_set) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but Levels=`{len(self.stack)}`')
         except KeyError:
             raise ExecutionError(
-                f'(push) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but name does not exist')
+                f'(stack_set) `{self.thread.id}:{self.thread.ip}` references `{name}:{level}` but name does not exist')
 
     def resolve_arg(self, idx):
         if len(self.args) <= idx:
@@ -84,6 +95,6 @@ class ExecutionContext(NamedTuple):
         elif isinstance(jmp, Constant):
             jmp = jmp.value
         else:
-            raise ExecutionError(f'(j) `{self.thread.id}:{self.thread.ip}` Incorrect jmp address: {repr(jmp)}')
+            raise ExecutionError(f'(resolve_arg) `{self.thread.id}:{self.thread.ip}` Incorrect arg: {repr(jmp)}')
 
         return jmp
