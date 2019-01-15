@@ -5,7 +5,7 @@ from typing import Dict
 
 from tfci.daemon import Daemon
 from tfci.settings import TFException
-from tfci_core.daemons.db_util import RangeEvent, Ev, watch_range_queue, queue_try
+from tfci.db.db_util import RangeEvent, Ev, watch_range_queue, queue_try
 from tfci_http.server import ServerProcess
 from tfci_http.struct import RouteDef
 

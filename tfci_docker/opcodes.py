@@ -4,7 +4,7 @@ from tfci_docker.struct import ServerDef
 
 
 def load_server(ctx: ExecutionContext, serv_id: str) -> ServerDef:
-    compare, succ = ServerDef.load(ctx.singleton.db, serv_id)
+    compare, succ = ServerDef.load_exists(ctx.singleton.db, serv_id)
 
     ok, (serv, *_) = ctx.singleton.db.transaction(compare=[compare], success=[succ], failure=[])
 
@@ -32,12 +32,14 @@ class PullOpcode(OpcodeDef):
 class StartOpcode(OpcodeDef):
     name = 'dckr_start'
 
-    def fn(self, ctx: ExecutionContext, serv_id: OpArg[str], name: OpArg[str], image: OpArg[str]):
+    def fn(self, ctx: ExecutionContext, serv_id: OpArg[str], name: OpArg[str], image: OpArg[str], *args: OpArg[str]):
         server = load_server(ctx, serv_id.get())
 
         with server.client() as c:
             c.containers.run(
-
+                image=image.get(),
+                name=name.get(),
+                detach=True
             )
 
 

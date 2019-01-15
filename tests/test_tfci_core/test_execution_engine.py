@@ -4,12 +4,12 @@ from typing import Tuple
 import tfci_core.opcodes
 import tfci_std.opcodes
 from test_tfci.compiler.test_compiler import load_opcodes
-from test_tfci.db.fixtures import Etcd3ServerTestCase, callback_fixture
+from test_tfci.db.fixtures import Etcd3ServerFixture, callback_fixture
 from tfci.dsl.compiler import compiler_compile_text
 from tfci.dsl.struct import ProgramDefinition
 from tfci.dsm.struct import ThreadContext, StackFrame
 from tfci.dsm.rt import ProgramPages, OpcodeDefinition
-from tfci_core.daemons.db_util import Transaction
+from tfci.db.ops import Transaction
 from tfci_core.daemons.worker.worker import ExecutionEngine
 
 TEST_IDENT = 'test_ident'
@@ -36,7 +36,7 @@ class TestProgramPages(ProgramPages):
         return self._cache[item]
 
 
-class TestExecutionEngine(Etcd3ServerTestCase):
+class TestExecutionEngine(Etcd3ServerFixture):
     def test_nonexistent_stack_arg(self):
         db, lease = self._db_lease()
         opcodes = load_opcodes(tfci_core.opcodes, tfci_std.opcodes)
@@ -58,13 +58,9 @@ class TestExecutionEngine(Etcd3ServerTestCase):
             [sf1.id]
         )
 
-        cmp1, cr1 = sf1.create(db)
-        cmp2, cr2 = t1.create(db)
+        tx = sf1.create().merge(t1.create())
 
-        ok, _ = Transaction.new(
-            [cmp1, cmp2],
-            [cr1, cr2],
-        ).exec(db)
+        ok, _, _ = tx.exec(db)
 
         self.assertTrue(ok, "Transaction must execute successfully")
 
@@ -99,14 +95,7 @@ class TestExecutionEngine(Etcd3ServerTestCase):
             [sf1.id]
         )
 
-        cmp1, cr1 = sf1.create(db)
-        cmp2, cr2 = t1.create(db)
-
-        ok, _ = Transaction.new(
-            [cmp1, cmp2],
-            [cr1, cr2],
-            success_map=[StackFrame, ThreadContext],
-        ).exec(db)
+        ok, _, _ = sf1.create().merge(t1.create()).exec(db)
 
         self.assertTrue(ok, "Transaction must execute successfully")
 
@@ -122,32 +111,21 @@ class TestExecutionEngine(Etcd3ServerTestCase):
 
         self.assertTrue(ok, "Step must execute succ III")
 
-        cmp1, cr1 = StackFrame.load(db, 'sf1')
-        cmp2, cr2 = ThreadContext.load(db, 't1')
+        tx1 = StackFrame.load_exists('sf1')
 
-        tx = Transaction.new(
-            [cmp1],
-            [cr1],
-            success_map=[StackFrame]
-        )
+        sf: StackFrame
 
-        ok, ((sf,), _) = tx.exec(
+        ok, (sf, ), _ = tx1.exec(
             db
         )
-
-        sf  # type: StackFrame
 
         self.assertTrue(ok, "StackFrame must exist")
 
         self.assertEqual(sf.vals['x'], 3, "Return value must be equal")
 
-        tx = Transaction.new(
-            [cmp2],
-            [cr2],
-            success_map=[ThreadContext]
-        )
+        tx2 = ThreadContext.load_exists('t1')
 
-        ok, ((tctx,), _) = tx.exec(
+        ok, (tctx,), _ = tx2.exec(
             db
         )
 
@@ -192,16 +170,7 @@ class TestExecutionEngine(Etcd3ServerTestCase):
             [sf1.id]
         )
 
-        cmp1, cr1 = sf1.create(db)
-        cmp2, cr2 = t1.create(db)
-
-        ok, _ = Transaction.new(
-            [cmp1, cmp2],
-            [cr1, cr2],
-            success_map=[StackFrame, ThreadContext],
-        ).exec(db)
-
-        self.assertTrue(ok, "Transaction must execute successfully")
+        ok, _, _ = sf1.create().merge(t1.create()).exec(db)
 
         tcxs = [t1]
 

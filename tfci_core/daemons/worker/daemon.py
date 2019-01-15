@@ -11,7 +11,7 @@ from etcd3.events import DeleteEvent, PutEvent
 from tfci.daemon import Daemon
 from tfci_core.daemons.worker.worker import ThreadExecutorInstance
 from tfci_core.const import JOBS_THREAD, JOBS_LOCK
-from tfci_core.daemons.db_util import watch_range
+from tfci.db.db_util import watch_range
 from tfci_core.daemons.generic.pool import TaskProcessPool
 from tfci.dsm.struct import ThreadContext
 

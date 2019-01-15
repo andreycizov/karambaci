@@ -96,7 +96,7 @@ class ServerDefManager(EntityManager):
 
     def _action_else(self, utility, **kwargs):
         if utility == 'test':
-            check, mod = self.model.load(self.db, kwargs['id'])
+            check, mod = self.model.load_exists(self.db, kwargs['id'])
 
             ok, ret = self.db.transaction(compare=[check], success=[mod], failure=[])
 

@@ -11,7 +11,7 @@ from etcd3.exceptions import ConnectionFailedError
 from tfci.dsm.executor import ExecutionContext
 from tfci.opcode import OpcodeDef, OpArg
 from tfci.settings import Settings
-from tfci_core.daemons.db_util import Lease
+from tfci.db.db_util import Lease
 
 
 def callback_fixture(opcode, callback):

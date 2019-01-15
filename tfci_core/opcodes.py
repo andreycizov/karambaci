@@ -61,7 +61,7 @@ class PullOpcode(SysOpcodeDef):
     def fn(self, ctx: ExecutionContext) -> FollowUp:
         # how do we know which stacks have been changed ?
 
-        csf = StackFrame.load(ctx.singleton.db, ctx.resolve_arg(0))
+        csf = StackFrame.load_exists(ctx.singleton.db, ctx.resolve_arg(0))
 
         push_pop(csf, ctx, ctx.args[1:])
 

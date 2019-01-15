@@ -7,7 +7,7 @@ from tfci.dsl.exception import CompilerException
 from tfci.dsm.executor import ExecutionError, ExecutionSingleton, ExecutionContext
 from tfci.dsm.struct import FollowUp, ThreadContext
 from tfci.dsm.rt import OpcodeDefinition, ProgramPages
-from tfci_core.daemons.db_util import Lease
+from tfci.db.db_util import Lease
 from tfci_core.daemons.generic.pool import WorkerInstance
 from tfci.settings import Settings
 

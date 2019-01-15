@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from etcd3 import Etcd3Client
 
+from tfci.db import ops
+from tfci.db.ops import Transaction
 from tfci.db.mapper import NamedTupleEx, MapperBase
 from tfci_core.const import JOBS_STACK, JOBS_THREAD, JOBS_LOCK
 
@@ -90,45 +92,40 @@ class ThreadContext(NamedTupleEx, MapperBase):
     def lock(self, db: Etcd3Client, lock_ident, lock_lease) -> Tuple[
         bool, Optional['ThreadContext'], List[Optional[StackFrame]]]:
 
-        ok, vals = db.transaction(
-            compare=[
-                db.transactions.version(self.lock_key) == 0,
-                db.transactions.version(self.key) > 0,
-            ],
-            success=[
-                        db.transactions.put(self.lock_key, lock_ident, lease=lock_lease),
-                        db.transactions.get(self.key),
-                    ] + [StackFrame.load(db, s)[1] for s in (self.sp if self.sp is not None else [])],
-            failure=[
-                db.transactions.get(self.key)
-            ]
+        tx = Transaction.new().compare(
+            ops.Version(self.lock_key) == 0,
+            ops.Version(self.key) > 0
+        ).success(
+            (None, ops.Put(self.lock_key, lock_ident, lease=lock_lease)),
+            (ThreadContext, ops.Get(self.key))
+        ).failure(
+            (ThreadContext, ops.Get(self.key))
         )
 
+        for x in self.sp:
+            tx = tx.merge(StackFrame.load(x))
+
+        ok: bool
+        item: ThreadContext
+        sfs: List[Optional[StackFrame]]
+        item_nok: ThreadContext
+
+        ok, (item, *sfs), (item_nok,) = tx.exec(db)
+
         if not ok:
-            return False, None, []
+            return False, item_nok, []
         else:
-            _, threads, *stacks = vals
+            if self.sp != item.sp:
+                tx_other = self.exists(self.id)
 
-            thread = ThreadContext.deserialize_range(threads)
+                for x in item.sp:
+                    tx_other = tx_other.merge(StackFrame.load(x))
 
-            if self.sp == thread.sp:
-                ret_stacks = [StackFrame.deserialize_range(s) for s in stacks]
-            else:
-                _, items = db.transaction(
-                    compare=[
-                        db.transactions.version('29384092rjufiosdajfoasdjfpdiosfjs') == 0
-                    ],
-                    success=[
-                        StackFrame.load(db, s)[1] for s in (thread.sp if thread.sp is not None else [])
-                    ],
-                    failure=[
+                ok, sfs, _ = tx_other.exec(db)
 
-                    ]
-                )
+                assert ok
 
-                ret_stacks = [StackFrame.deserialize_range(s) for s in items]
-
-            return ok, thread, ret_stacks
+            return ok, item, sfs
 
     def update(self, ip: str = UNSET, sp: List[str] = UNSET):
         new_ip = self.ip if ip == UNSET else ip

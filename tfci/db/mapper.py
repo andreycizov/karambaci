@@ -3,7 +3,9 @@ from typing import Type, Optional, Dict, TypeVar, NamedTupleMeta
 
 from etcd3 import Etcd3Client
 
-from tfci_core.daemons.db_util import RangeEvent
+from tfci.db import ops
+from tfci.db.ops import Transaction
+from tfci.db.db_util import RangeEvent
 
 T = TypeVar('T')
 
@@ -30,29 +32,39 @@ class MapperBase:
     def key(self):
         return self.key_fn(self.id)
 
-    def put(self, db: Etcd3Client):
-        return db.transactions.put(self.key, self.serialize())
+    def put(self):
+        return Transaction.new().success(
+            (None, ops.Put(self.key, self.serialize()))
+        )
 
-    def create(self, db: Etcd3Client):
-        return db.transactions.version(self.key) == 0, self.put(db)
+    def create(self) -> Transaction:
+        return Transaction.new().compare(ops.Version(self.key) == 0).merge(self.put())
 
-    def update(self, db: Etcd3Client):
-        return db.transactions.version(self.key) == self.version, self.put(db)
+    def update(self) -> Transaction:
+        return Transaction.new().compare(ops.Version(self.key) == self.version).merge(self.put())
 
-    def delete_cmp(self, db: Etcd3Client, id):
-        return db.transactions.version(self.key) == self.version, db.transactions.delete(self.key)
-
-    @classmethod
-    def exists(cls, db: Etcd3Client, id):
-        return db.transactions.version(cls.key_fn(id)) > 0
+    def delete_cmp(self) -> Transaction:
+        return Transaction.new().compare(ops.Version(self.key) == self.version).merge(self.delete(self.id))
 
     @classmethod
-    def delete(cls, db: Etcd3Client, id):
-        return cls.exists(db, id), db.transactions.delete(cls.key_fn(id))
+    def exists(cls, id) -> Transaction:
+        return Transaction.new().compare(ops.Version(cls.key_fn(id)) > 0)
 
     @classmethod
-    def load(cls, db: Etcd3Client, id):
-        return cls.exists(db, id), db.transactions.get(cls.key_fn(id))
+    def delete(cls, id) -> Transaction:
+        return cls.exists(id).success(
+            (None, ops.Delete(cls.key_fn(id))),
+        )
+
+    @classmethod
+    def load(cls, id) -> Transaction:
+        return Transaction.new().success(
+            (cls, ops.Get(cls.key_fn(id))),
+        )
+
+    @classmethod
+    def load_exists(cls, id) -> Transaction:
+        return cls.exists(id).merge(cls.load(id))
 
     @classmethod
     def deserialize_watch(cls: Type[T], ev: RangeEvent):
@@ -60,9 +72,7 @@ class MapperBase:
 
     @classmethod
     def deserialize_range(cls: Type[T], items) -> Optional[T]:
-        if items is None:
-            return None
-        elif len(items) == 0:
+        if len(items) == 0:
             return None
         elif len(items) > 1:
             assert False, f'you are deserializing a range that is too long? {range}'

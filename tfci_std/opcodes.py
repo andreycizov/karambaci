@@ -109,7 +109,7 @@ class FreezeForkOpcode(SysOpcodeDef):
 
     def fn(self, ctx: ExecutionContext):
         frz_id = ctx.resolve_arg(0)
-        cmp, succ = FrozenThreadContext.load(ctx.singleton.db, frz_id)
+        cmp, succ = FrozenThreadContext.load_exists(ctx.singleton.db, frz_id)
 
         ok, items = ctx.singleton.db.transaction(
             compare=[

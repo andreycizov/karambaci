@@ -1,7 +1,7 @@
 import time
 
 from tfci.daemon import Daemon
-from tfci_core.daemons.db_util import watch_range
+from tfci.db.db_util import watch_range
 
 
 class WatcherDaemon(Daemon):

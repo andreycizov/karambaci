@@ -1,12 +1,10 @@
 # given a definition of mappings between the paths
 # serve requests
-import sys
 import setproctitle
 import subprocess
 
 from functools import partial
 from typing import Optional, Dict
-from uuid import uuid4
 
 from bottle import Bottle
 from bottle import response
@@ -14,9 +12,8 @@ from etcd3 import Etcd3Client
 
 from tfci.settings import Settings
 from tfci.time import time_now
-from tfci_core.daemons.db_util import watch_range_single, Ev
+from tfci.db.db_util import watch_range_single, Ev
 from tfci_core.daemons.generic.pool import argv_decode, argv_encode
-from tfci.dsm.struct import StackFrame
 from tfci_http.struct import RouteDef, Request, Reply
 from tfci_std.struct import FrozenThreadContext
 
@@ -86,7 +83,7 @@ def bottle_server(ident, address, settings: Settings, routes: Dict[str, RouteDef
     singleton = Singleton(settings)
 
     for x in routes.values():
-        cmp, succ = FrozenThreadContext.load(singleton.db, x.frz_id)
+        cmp, succ = FrozenThreadContext.load_exists(singleton.db, x.frz_id)
 
         ok, (items,) = singleton.db.transaction(compare=[cmp], success=[succ], failure=[])
 
